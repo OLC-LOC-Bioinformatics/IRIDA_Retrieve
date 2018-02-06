@@ -81,28 +81,32 @@ if __name__ == '__main__':
     print('Enter the path to the External Drive: ')
     mounted_drive = input('Enter the path to the External Drive: ')
     redmine = redmine_setup(api_key)
-    while True:
-        if not os.path.ismount(mounted_drive):
-            print('The drive specified ({}) is not connected! Process will not start until it is connected.'.format(mounted_drive))
+    try:
+        while True:
+            if not os.path.ismount(mounted_drive):
+                print('The drive specified ({}) is not connected! Process will not start until it is connected.'.format(mounted_drive))
+                continue
 
-        issues = retrieve_issues(redmine_instance=redmine)
-        new_jobs = new_automation_jobs(issues)
-        if len(new_jobs) > 0:
-            for job, job_type in new_jobs.items():
-                print('Responding to redmine request number: {}'.format(job.id))
-                description = retrieve_issue_description(job)
-                if not os.path.isdir(os.path.join(mounted_drive, str(job.id))):
-                    os.makedirs(os.path.join(mounted_drive, str(job.id)))
+            issues = retrieve_issues(redmine_instance=redmine)
+            new_jobs = new_automation_jobs(issues)
+            if len(new_jobs) > 0:
+                for job, job_type in new_jobs.items():
+                    print('Responding to redmine request number: {}'.format(job.id))
+                    description = retrieve_issue_description(job)
+                    if not os.path.isdir(os.path.join(mounted_drive, str(job.id))):
+                        os.makedirs(os.path.join(mounted_drive, str(job.id)))
 
-                output_folder = os.path.join(mounted_drive, str(job.id))
-                sequences_info = list()
-                for input_line in description:
-                    if input_line is not '':
-                        sequences_info.append(SequenceInfo(input_line))
-                sequences_info = get_validated_seqids(sequences_info)
-                missing_files = MassExtractor(nas_mnt='/mnt/nas/').move_files(sequences_info, output_folder)
-                print('IRIDA retrieve request complete.')
-                redmine.issue.update(resource_id=job.id,
-                                     notes='Irida retrieve complete!',
-                                     status_id=4)
-        time.sleep(60)
+                    output_folder = os.path.join(mounted_drive, str(job.id))
+                    sequences_info = list()
+                    for input_line in description:
+                        if input_line is not '':
+                            sequences_info.append(SequenceInfo(input_line))
+                    sequences_info = get_validated_seqids(sequences_info)
+                    missing_files = MassExtractor(nas_mnt='/mnt/nas/').move_files(sequences_info, output_folder)
+                    print('IRIDA retrieve request complete.')
+                    redmine.issue.update(resource_id=job.id,
+                                         notes='Irida retrieve complete!',
+                                         status_id=4)
+            time.sleep(60)
+    except:
+        pass
