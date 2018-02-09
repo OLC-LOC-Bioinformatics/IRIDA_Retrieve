@@ -85,6 +85,7 @@ if __name__ == '__main__':
         while True:
             if not os.path.ismount(mounted_drive):
                 print('The drive specified ({}) is not connected! Process will not start until it is connected.'.format(mounted_drive))
+                time.sleep(60)
                 continue
 
             issues = retrieve_issues(redmine_instance=redmine)
