@@ -39,14 +39,16 @@ class MassExtractor(object):
             # Create a SequencePair object that will store all relevant paths
             sequence_pair = SequencePair(sequence_info=sequence)
             # Set the path to check depending on the SEQ-ID abbreviation used to speed up the process
-            if 'SEQ' in sequence.sample_name:
-                path_to_check = os.path.join(self.nas_mnt, 'MiSeq_Backup', '*', '*.fastq.gz')
-            elif 'OLF' in sequence.sample_name:
-                path_to_check = os.path.join(self.nas_mnt, 'External_MiSeq_Backup', '*', '*', '*', '*.fastq.gz')
-            elif 'MER' in sequence.sample_name:
+            # if 'SEQ' in sequence.sample_name:
+            #     path_to_check = os.path.join(self.nas_mnt, 'MiSeq_Backup', '*', '*.fastq.gz')
+            # elif 'OLF' in sequence.sample_name:
+            #     path_to_check = os.path.join(self.nas_mnt, 'External_MiSeq_Backup', '*', '*', '*', '*.fastq.gz')
+            if 'MER' in sequence.sample_name:  #TODO: Change this once merged sequences are moved to nas2
                 path_to_check = os.path.join(self.nas_mnt, 'merge_Backup', '*.fastq.gz')
             else:
-                path_to_check = os.path.join(self.nas_mnt, 'External_MiSeq_Backup', '*', '*', '*.fastq.gz')
+                path_to_check = os.path.join('/mnt/nas2/raw_sequence_data/miseq/*/*.fastq.gz')
+            # else:
+            #     path_to_check = os.path.join(self.nas_mnt, 'External_MiSeq_Backup', '*', '*', '*.fastq.gz')
 
             for path in glob.iglob(path_to_check):
                 if sequence.sample_name in path:
