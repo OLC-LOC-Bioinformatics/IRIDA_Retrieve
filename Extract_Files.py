@@ -154,6 +154,7 @@ class MassExtractor(object):
                 mounted_path = os.path.join(self.seqid_mounted_path, sequence_pair.seqid_info.sample_id + "_S1_L001"
                                             + sample_type + "_001" + ".fastq.gz")
 
+
                 shutil.copy(path, mounted_path)
             except TypeError as e:
                 # If one of the files cannot be copied over due to an error, add it to the missing files lsit
@@ -174,3 +175,18 @@ class MassExtractor(object):
 
         # Copy the local SampleSheet onto the drive in the new location
         shutil.copy(local_generic_samplesheet_path, self.generic_sample_sheet_path)
+
+
+def check_genome_size(forward_reads, reverse_reads):
+    genome_size = None
+    cmd = 'kmercountexact.sh in={forward_reads} in2={reverse_reads} peaks=peaks.txt overwrite=true'.format(forward_reads=forward_reads,
+                                                                                                           reverse_reads=reverse_reads)
+    os.system(cmd)
+    with open('peaks.txt') as f:
+        lines = f.readlines()
+    for line in lines:
+        if 'haploid_genome_size' in line:
+            genome_size = int(line.split()[1])
+            return genome_size
+    return genome_size
+
