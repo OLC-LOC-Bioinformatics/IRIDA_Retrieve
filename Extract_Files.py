@@ -39,12 +39,8 @@ class MassExtractor(object):
             # Create a SequencePair object that will store all relevant paths
             sequence_pair = SequencePair(sequence_info=sequence)
             # Set the path to check depending on the SEQ-ID abbreviation used to speed up the process
-            # if 'SEQ' in sequence.sample_name:
-            #     path_to_check = os.path.join(self.nas_mnt, 'MiSeq_Backup', '*', '*.fastq.gz')
-            # elif 'OLF' in sequence.sample_name:
-            #     path_to_check = os.path.join(self.nas_mnt, 'External_MiSeq_Backup', '*', '*', '*', '*.fastq.gz')
-            if 'MER' in sequence.sample_name:  #TODO: Change this once merged sequences are moved to nas2
-                path_to_check = os.path.join(self.nas_mnt, 'merge_Backup', '*.fastq.gz')
+            if 'MER' in sequence.sample_name:
+                path_to_check = os.path.join('/mnt/nas2/raw_sequence_data/merged_sequences/*.fastq.gz')
             else:
                 path_to_check = os.path.join('/mnt/nas2/raw_sequence_data/miseq/*/*.fastq.gz')
             # else:
@@ -142,23 +138,29 @@ class MassExtractor(object):
         "drivepath/Data/Intensities/BaseCalls"
         :param sequence_pair: All information for a pair of SEQ-IDs
         """
-        for path in sequence_pair.seqid_paths:
-            try:
-                # Check if the file is R1 or R2
-                sample_type = "_R1"
-                if "R2" in path:
-                    sample_type = "_R2"
+        # Figure out if which file is forward/reverse reads.
+        if len(sequence_pair.seqid_paths) != 2:
+            self.missing.append(sequence_pair.seqid_info.sample_name)
+            return
+        if '_R1' in sequence_pair.seqid_paths[0]:
+            forward_reads = sequence_pair.seqid_paths[0]
+            reverse_reads = sequence_pair.seqid_paths[1]
+        else:
+            forward_reads = sequence_pair.seqid_paths[1]
+            reverse_reads = sequence_pair.seqid_paths[0]
 
-                # Path the file will be copied to on the drive
-                # Needs the extra string parameters to be recognized by the irida uploader
-                mounted_path = os.path.join(self.seqid_mounted_path, sequence_pair.seqid_info.sample_id + "_S1_L001"
-                                            + sample_type + "_001" + ".fastq.gz")
-
-
-                shutil.copy(path, mounted_path)
-            except TypeError as e:
-                # If one of the files cannot be copied over due to an error, add it to the missing files lsit
-                self.missing.append(sequence_pair.seqid_info.sample_name)
+        # Check genome size - used to downsample extremely high coverage stuff to 200x coverage.
+        genome_size = check_genome_size(forward_reads, reverse_reads)
+        # Now call reformat.sh, set samplebasestarget to 200X coverage. If reads have less than that, this just
+        # acts as a copy, otherwise, will downsample to 200X.
+        samplebasestarget = genome_size * 200
+        cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out={forward_out} out2={reverse_out} ' \
+              'samplebasestarget={samplebasestarget}'.format(forward_reads=forward_reads,
+                                                             reverse_reads=reverse_reads,
+                                                             forward_out=os.path.join(self.seqid_mounted_path, sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz'),
+                                                             reverse_out=os.path.join(self.seqid_mounted_path, sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz'),
+                                                             samplebasestarget=samplebasestarget)
+        os.system(cmd)
 
     def mount_generic_samplesheet(self, outputfolder):
         """
