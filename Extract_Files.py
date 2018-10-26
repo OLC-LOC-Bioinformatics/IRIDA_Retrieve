@@ -154,12 +154,11 @@ class MassExtractor(object):
         # Now call reformat.sh, set samplebasestarget to 200X coverage. If reads have less than that, this just
         # acts as a copy, otherwise, will downsample to 200X.
         samplebasestarget = genome_size * 200
-        self.seqid_mounted_path = self.seqid_mounted_path.replace(' ', '\\ ')
         cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out=\'{forward_out}\' out2=\'{reverse_out}\' ' \
               'samplebasestarget={samplebasestarget}'.format(forward_reads=forward_reads,
                                                              reverse_reads=reverse_reads,
-                                                             forward_out=os.path.join(self.seqid_mounted_path, sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz'),
-                                                             reverse_out=os.path.join(self.seqid_mounted_path, sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz'),
+                                                             forward_out=os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz'),
+                                                             reverse_out=os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz'),
                                                              samplebasestarget=samplebasestarget)
         os.system(cmd)
 
