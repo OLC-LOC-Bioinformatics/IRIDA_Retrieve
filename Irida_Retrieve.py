@@ -87,6 +87,8 @@ if __name__ == '__main__':
     print('Enter the path to the External Drive: ')
     mounted_drive = input('Enter the path to the External Drive: ')
     redmine = redmine_setup(api_key)
+    if ' ' in mounted_drive:
+        mounted_drive = mounted_drive.encode('unicode_escape').decode()
     # try:
     while True:
         if not os.path.ismount(mounted_drive):
