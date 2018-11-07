@@ -1,7 +1,8 @@
 import os
-import shutil
-import glob
 import csv
+import glob
+import gzip
+import shutil
 from Sequence_File import SequencePair
 from Utilities import UtilityMethods
 
@@ -10,6 +11,7 @@ class MassExtractor(object):
 
     def __init__(self, nas_mnt):
         self.missing = list()
+        self.low_quality = list()
         self.nas_mnt = nas_mnt
         self.seqid_rows = list()
         self.generic_sample_sheet_path = ""
@@ -100,8 +102,9 @@ class MassExtractor(object):
                             if len(row) > 10:
                                 i = 10 - len(row)
                                 del row[i:]
-                            # Add the row to the list
-                            self.seqid_rows.append(row)
+                            # Add the row to the list - if the sequences had high enough average quality.
+                            if sequence_pair.seqid_info.sample_id not in self.low_quality:
+                                self.seqid_rows.append(row)
                             break
 
     @ staticmethod
@@ -154,13 +157,18 @@ class MassExtractor(object):
         # Now call reformat.sh, set samplebasestarget to 200X coverage. If reads have less than that, this just
         # acts as a copy, otherwise, will downsample to 200X.
         samplebasestarget = genome_size * 200
+        forward_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz')
+        reverse_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz')
         cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out=\'{forward_out}\' out2=\'{reverse_out}\' ' \
               'samplebasestarget={samplebasestarget}'.format(forward_reads=forward_reads,
                                                              reverse_reads=reverse_reads,
-                                                             forward_out=os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz'),
-                                                             reverse_out=os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz'),
+                                                             forward_out=forward_out,
+                                                             reverse_out=reverse_out,
                                                              samplebasestarget=samplebasestarget)
         os.system(cmd)
+        average_forward_score, average_reverse_score = find_average_qscore(forward_reads, reverse_reads)
+        if average_forward_score < 30.0:
+            self.low_quality.append(sequence_pair.seqid_info.sample_id)
 
     def mount_generic_samplesheet(self, outputfolder):
         """
@@ -192,3 +200,65 @@ def check_genome_size(forward_reads, reverse_reads):
             return genome_size
     return genome_size
 
+
+# Heng Li readfq - super fast!
+def readfq(fp):  # this is a generator function
+    last = None  # this is a buffer keeping the last unprocessed line
+    while True:  # mimic closure; is it a bad idea?
+        if not last:  # the first record or a record following a fastq
+            for l in fp:  # search for the start of the next record
+                if l[0] in '>@':  # fasta/q header line
+                    last = l[:-1]  # save this line
+                    break
+        if not last:
+            break
+        name, seqs, last = last[1:].partition(" ")[0], [], None
+        for l in fp:  # read the sequence
+            if l[0] in '@+>':
+                last = l[:-1]
+                break
+            seqs.append(l[:-1])
+        if not last or last[0] != '+':  # this is a fasta record
+            yield name, ''.join(seqs), None  # yield a fasta record
+            if not last:
+                break
+        else:  # this is a fastq record
+            seq, leng, seqs = ''.join(seqs), 0, []
+            for l in fp:  # read the quality
+                seqs.append(l[:-1])
+                leng += len(l) - 1
+                if leng >= len(seq): # have read enough quality
+                    last = None
+                    yield name, seq, ''.join(seqs);  # yield a fastq record
+                    break
+            if last:  # reach EOF before reading enough quality
+                yield name, seq, None  # yield a fasta record instead
+                break
+
+
+def find_average_qscore(forward_reads, reverse_reads):
+    forward_read_qualities = list()
+    reverse_read_qualities = list()
+
+    if forward_reads.endswith('.gz'):
+        for name, seq, qual in readfq(gzip.open(forward_reads, 'rt')):
+            for q in qual:
+                forward_read_qualities.append((ord(q) - 33))
+    else:
+        for name, seq, qual in readfq(open(forward_reads)):
+            for q in qual:
+                forward_read_qualities.append((ord(q) - 33))
+
+    if reverse_reads.endswith('.gz'):
+        for name, seq, qual in readfq(gzip.open(reverse_reads, 'rt')):
+            for q in qual:
+                reverse_read_qualities.append((ord(q) - 33))
+    else:
+        for name, seq, qual in readfq(open(reverse_reads)):
+            for q in qual:
+                reverse_read_qualities.append((ord(q) - 33))
+
+    average_forward_score = sum(forward_read_qualities)/len(forward_read_qualities)
+    average_reverse_score = sum(reverse_read_qualities)/len(reverse_read_qualities)
+
+    return average_forward_score, average_reverse_score
