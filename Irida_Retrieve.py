@@ -111,7 +111,8 @@ if __name__ == '__main__':
                     if input_line is not '':
                         sequences_info.append(SequenceInfo(input_line))
                 sequences_info = get_validated_seqids(sequences_info)
-                missing_files, low_quality = MassExtractor(nas_mnt='/mnt/nas/').move_files(sequences_info, output_folder)
+                extractor = MassExtractor(nas_mnt='/mnt/nas/')
+                missing_files, low_quality = extractor.move_files(sequences_info, output_folder)
                 print('IRIDA retrieve request complete.')
                 if low_quality:
                     redmine.issue.update(resource_id=job.id,

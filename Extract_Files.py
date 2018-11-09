@@ -68,7 +68,7 @@ class MassExtractor(object):
         self.mount_generic_samplesheet(outputfolder)
         self.append_generic_csv(self.generic_sample_sheet_path)
 
-        return self.missing
+        return self.missing, self.low_quality
 
     def add_seqid_csv_data(self, sequence_pair):
         """
@@ -169,6 +169,8 @@ class MassExtractor(object):
         average_forward_score, average_reverse_score = find_average_qscore(forward_reads, reverse_reads)
         if average_forward_score < 30.0:
             self.low_quality.append(sequence_pair.seqid_info.sample_id)
+            os.remove(forward_out)
+            os.remove(reverse_out)
 
     def mount_generic_samplesheet(self, outputfolder):
         """
