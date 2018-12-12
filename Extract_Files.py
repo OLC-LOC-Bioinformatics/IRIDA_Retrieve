@@ -156,21 +156,25 @@ class MassExtractor(object):
         genome_size = check_genome_size(forward_reads, reverse_reads)
         # Now call reformat.sh, set samplebasestarget to 200X coverage. If reads have less than that, this just
         # acts as a copy, otherwise, will downsample to 200X.
+        # Very occasionally genome_size will get set to None. If that's the case, just assume a 5MB genome.
+        if genome_size is None:
+            genome_size = 5000000
         samplebasestarget = genome_size * 200
         forward_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz')
         reverse_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz')
-        cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out=\'{forward_out}\' out2=\'{reverse_out}\' ' \
-              'samplebasestarget={samplebasestarget}'.format(forward_reads=forward_reads,
-                                                             reverse_reads=reverse_reads,
-                                                             forward_out=forward_out,
-                                                             reverse_out=reverse_out,
-                                                             samplebasestarget=samplebasestarget)
-        os.system(cmd)
+        if not os.path.isfile(forward_reads):
+            cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out=\'{forward_out}\' out2=\'{reverse_out}\' ' \
+                  'samplebasestarget={samplebasestarget}'.format(forward_reads=forward_reads,
+                                                                 reverse_reads=reverse_reads,
+                                                                 forward_out=forward_out,
+                                                                 reverse_out=reverse_out,
+                                                                 samplebasestarget=samplebasestarget)
+            os.system(cmd)
         average_forward_score, average_reverse_score = find_average_qscore(forward_reads, reverse_reads)
         if average_forward_score < 30.0:
             self.low_quality.append(sequence_pair.seqid_info.sample_id)
-            os.remove(forward_out)
-            os.remove(reverse_out)
+            # os.remove(forward_out)
+            # os.remove(reverse_out)
 
     def mount_generic_samplesheet(self, outputfolder):
         """
