@@ -162,7 +162,7 @@ class MassExtractor(object):
         samplebasestarget = genome_size * 200
         forward_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz')
         reverse_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz')
-        if not os.path.isfile(forward_reads):
+        if not os.path.isfile(forward_out):
             cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out=\'{forward_out}\' out2=\'{reverse_out}\' ' \
                   'samplebasestarget={samplebasestarget}'.format(forward_reads=forward_reads,
                                                                  reverse_reads=reverse_reads,
