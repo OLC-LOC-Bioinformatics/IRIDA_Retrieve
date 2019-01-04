@@ -9,7 +9,7 @@ To use:
 
 - Clone this repository.
 
-- `source /mnt/nas/Redmine/.virtualenvs/OLCRedmineAutomator/bin/activate`
+- `source /mnt/nas2/redmine/applications/.virtualenvs/OLCRedmineAutomator/bin/activate`
 
 - `python Irida_Retrieve.py`
 
