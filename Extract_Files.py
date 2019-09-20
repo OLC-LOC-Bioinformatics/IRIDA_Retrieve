@@ -195,8 +195,20 @@ class MassExtractor(object):
 
 def check_genome_size(forward_reads, reverse_reads):
     genome_size = None
-    cmd = 'kmercountexact.sh in={forward_reads} in2={reverse_reads} peaks=peaks.txt overwrite=true'.format(forward_reads=forward_reads,
-                                                                                                           reverse_reads=reverse_reads)
+    if forward_reads.startswith("/mnt/nas2/raw_sequence_data/miseq/"):
+        pathcomp = forward_reads.split("/")
+        metafile = "/mnt/nas2/processed_sequence_data/miseq_assemblies/" + pathcomp[5] + "/reports/combinedMetadata.csv"
+        samplename = pathcomp[6].split("_", 1)[0]
+        with open(metafile) as f:
+            lines = f.readlines()
+        for line in lines:
+            if line.startswith(samplename + ","):
+                genome_size = int(line.split(",")[8])
+                if genome_size > 1000000:
+                    return genome_size
+                break
+    # if genome_size doesn't pass sanity check, get it the slow way.
+    cmd = 'kmercountexact.sh in={forward_reads} in2={reverse_reads} peaks=peaks.txt overwrite=true'.format(forward_reads=forward_reads, reverse_reads=reverse_reads)
     os.system(cmd)
     with open('peaks.txt') as f:
         lines = f.readlines()
