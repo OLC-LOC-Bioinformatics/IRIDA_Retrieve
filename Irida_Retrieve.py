@@ -82,9 +82,7 @@ if __name__ == '__main__':
         if shutil.which(dependency) is None:
             print('Dependency {} not found. Quitting...'.format(dependency))
             quit(code=1)
-    print('Enter your Redmine API Key: ')
     api_key = input('Enter your Redmine API Key: ')
-    print('Enter the path to the External Drive: ')
     mounted_drive = input('Enter the path to the External Drive: ')
     redmine = redmine_setup(api_key)
     if ' ' in mounted_drive:
@@ -119,7 +117,7 @@ if __name__ == '__main__':
                                          notes='WARNING: The following sample IDs had average read qualities below Q30'
                                                ' and were not retrieved: {}'.format(low_quality))
                 redmine.issue.update(resource_id=job.id,
-                                     notes='Irida retrieve complete!',
+                                     notes='IRIDA retrieve complete! The sequences are ready to upload.',
                                      status_id=4)
         time.sleep(60)
     # except:
