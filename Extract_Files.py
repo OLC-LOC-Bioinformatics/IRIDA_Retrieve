@@ -3,6 +3,7 @@ import csv
 import glob
 import gzip
 import shutil
+import zipfile
 from Sequence_File import SequencePair
 from Utilities import UtilityMethods
 
@@ -152,23 +153,28 @@ class MassExtractor(object):
             forward_reads = sequence_pair.seqid_paths[1]
             reverse_reads = sequence_pair.seqid_paths[0]
 
-        # Check genome size - used to downsample extremely high coverage stuff to 200x coverage.
-        genome_size = check_genome_size(forward_reads, reverse_reads)
-        # Now call reformat.sh, set samplebasestarget to 200X coverage. If reads have less than that, this just
-        # acts as a copy, otherwise, will downsample to 200X.
-        # Very occasionally genome_size will get set to None. If that's the case, just assume a 5MB genome.
-        if genome_size is None:
-            genome_size = 5000000
-        samplebasestarget = genome_size * 200
         forward_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R1_001.fastq.gz')
         reverse_out = os.path.join(self.seqid_mounted_path.replace(' ', '\\ '), sequence_pair.seqid_info.sample_id + '_S1_L001_R2_001.fastq.gz')
         if not os.path.isfile(forward_out):
-            cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out=\'{forward_out}\' out2=\'{reverse_out}\' ' \
+            knowndepth = check_depth(forward_reads)
+            if knowndepth > 200:
+                # Check genome size - used to downsample extremely high coverage stuff to 200x coverage.
+                genome_size = check_genome_size(forward_reads, reverse_reads)
+                # Now call reformat.sh, set samplebasestarget to 200X coverage. If reads have less than that, this just
+                # acts as a copy, otherwise, will downsample to 200X.
+                # Very occasionally genome_size will get set to None. If that's the case, just assume a 5MB genome.
+                if genome_size is None:
+                    genome_size = 5000000
+                samplebasestarget = genome_size * 200
+                cmd = 'reformat.sh in={forward_reads} in2={reverse_reads} out=\'{forward_out}\' out2=\'{reverse_out}\' ' \
                   'samplebasestarget={samplebasestarget}'.format(forward_reads=forward_reads,
                                                                  reverse_reads=reverse_reads,
                                                                  forward_out=forward_out,
                                                                  reverse_out=reverse_out,
                                                                  samplebasestarget=samplebasestarget)
+            else:
+                cmd = 'cp {forward_reads} {forward_out} && cp {reverse_reads} {reverse_out}'.format(forward_reads=forward_reads, forward_out=forward_out, reverse_reads=reverse_reads, reverse_out=reverse_out)
+            print(cmd)
             os.system(cmd)
         average_forward_score, average_reverse_score = find_average_qscore(forward_reads, reverse_reads)
         if average_forward_score < 30.0:
@@ -193,6 +199,30 @@ class MassExtractor(object):
         shutil.copy(local_generic_samplesheet_path, self.generic_sample_sheet_path)
 
 
+def check_depth(forward_reads):
+    if forward_reads.startswith("/mnt/nas2/raw_sequence_data/miseq/"):
+        pathcomp = forward_reads.split("/")
+        metafile = "/mnt/nas2/processed_sequence_data/miseq_assemblies/" + pathcomp[5] + "/reports/combinedMetadata.csv"
+        if os.path.isfile(metafile):
+            samplename = pathcomp[6].split("_", 1)[0]
+            with open(metafile) as f:
+                lines = f.readlines()
+            try:
+                cols = lines[0].split(",")
+                colofinterest = [c for c in range(len(cols) - 1) if cols[c] == "AverageCoverageDepth"][0]
+                for line in lines:
+                    if line.startswith(samplename + ","):
+                        return float(line.split(",")[colofinterest])
+                        break
+            except:
+                return 9001
+        else:
+            return 9002
+    else:
+        return 9003 
+
+
+
 def check_genome_size(forward_reads, reverse_reads):
     genome_size = None
     if forward_reads.startswith("/mnt/nas2/raw_sequence_data/miseq/"):
@@ -205,7 +235,7 @@ def check_genome_size(forward_reads, reverse_reads):
             for line in lines:
                 if line.startswith(samplename + ","):
                     try:
-                        genome_size = int(line.split(",")[6])
+                        genome_size = int(line.split(",")[8])
                         if genome_size > 1000000:
                             return genome_size
                     except:
@@ -257,30 +287,58 @@ def readfq(fp):  # this is a generator function
                 yield name, seq, None  # yield a fasta record instead
                 break
 
+def qscore_from_fastqc(fqcpath, fqc):
+    reading=False
+    qsum=0
+    count=0
+    with zipfile.ZipFile(fqcpath) as z:
+        with z.open(fqc) as f:
+            for l in f:
+                line = l.decode("UTF-8")
+                if reading:
+                    if line.startswith(">"):
+                        return qsum / count
+                    else:
+                        splitline = line.split("\t")
+                        qsum += float(splitline[0]) * float(splitline[1])
+                        count += float(splitline[1])
+                elif line == "#Quality\tCount\n":
+                    reading=True 
+
 
 def find_average_qscore(forward_reads, reverse_reads):
-    forward_read_qualities = list()
-    reverse_read_qualities = list()
+    # these methods seem to get slightly different results, but
+    # I'm not super confident that the old way's better, and the new way's so much faster...
+    try:
+        pathcomp = forward_reads.split("/")
+        fqdir = "/mnt/nas2/processed_sequence_data/miseq_assemblies/" + pathcomp[5] + "/" + pathcomp[6].split("_")[0] + "/fastqc/Raw"
+        n = pathcomp[6].split(".")[0]
+        average_forward_score = qscore_from_fastqc(fqdir + "/" + n + "_fastqc.zip", n + "_fastqc/fastqc_data.txt")
+        n = reverse_reads.split("/")[6].split(".")[0]
+        average_reverse_score = qscore_from_fastqc(fqdir + "/" + n + "_fastqc.zip", n + "_fastqc/fastqc_data.txt")
+    except:
+        forward_read_qualities = list()
+        reverse_read_qualities = list()
 
-    if forward_reads.endswith('.gz'):
-        for name, seq, qual in readfq(gzip.open(forward_reads, 'rt')):
-            for q in qual:
-                forward_read_qualities.append((ord(q) - 33))
-    else:
-        for name, seq, qual in readfq(open(forward_reads)):
-            for q in qual:
-                forward_read_qualities.append((ord(q) - 33))
+        if forward_reads.endswith('.gz'):
+            for name, seq, qual in readfq(gzip.open(forward_reads, 'rt')):
+                for q in qual:
+                    forward_read_qualities.append((ord(q) - 33))
+        else:
+            for name, seq, qual in readfq(open(forward_reads)):
+                for q in qual:
+                    forward_read_qualities.append((ord(q) - 33))
 
-    if reverse_reads.endswith('.gz'):
-        for name, seq, qual in readfq(gzip.open(reverse_reads, 'rt')):
-            for q in qual:
-                reverse_read_qualities.append((ord(q) - 33))
-    else:
-        for name, seq, qual in readfq(open(reverse_reads)):
-            for q in qual:
-                reverse_read_qualities.append((ord(q) - 33))
+        if reverse_reads.endswith('.gz'):
+            for name, seq, qual in readfq(gzip.open(reverse_reads, 'rt')):
+                for q in qual:
+                    reverse_read_qualities.append((ord(q) - 33))
+        else:
+            for name, seq, qual in readfq(open(reverse_reads)):
+                for q in qual:
+                    reverse_read_qualities.append((ord(q) - 33))
 
-    average_forward_score = sum(forward_read_qualities)/len(forward_read_qualities)
-    average_reverse_score = sum(reverse_read_qualities)/len(reverse_read_qualities)
+        average_forward_score = sum(forward_read_qualities)/len(forward_read_qualities)
+        average_reverse_score = sum(reverse_read_qualities)/len(reverse_read_qualities)
 
     return average_forward_score, average_reverse_score
